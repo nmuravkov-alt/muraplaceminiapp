@@ -196,21 +196,18 @@ select{
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.9);
-
-  /* 🔥 Ключевое: когда закрыт — его нет вообще */
-  display: none;
-
+  display: flex;
   justify-content: center;
   align-items: center;
   z-index: 2000;
   cursor: zoom-out;
-
-  /* чтобы в viewer не было “случайного” скролла страницы */
   touch-action: none;
 }
 
-#imgViewer.show{
-  display: flex;          /* показываем только когда открыт */
+/* когда скрыт — реально исчезает и не блокирует клики/скролл */
+#imgViewer.hidden{
+  display: none !important;
+  pointer-events: none !important;
 }
 
 #imgViewer img{
@@ -220,30 +217,12 @@ select{
   object-fit: contain;
 }
 
-/* (опционально) плавное появление без блокировки скролла */
-#imgViewer.show{
+/* опционально: плавное появление */
+#imgViewer:not(.hidden){
   animation: viewerFade .18s ease;
 }
 
-/* Плавное появление */
 @keyframes viewerFade {
   from { opacity: 0; }
   to   { opacity: 1; }
-  /* 🔥 FIX: viewer реально исчезает и не блокирует скролл */
-#imgViewer.hidden { 
-  display: none !important; 
-  pointer-events: none !important;
-}
-
-#imgViewer {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.9);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000;
-  pointer-events: auto;
-  touch-action: none;
-}
 }
