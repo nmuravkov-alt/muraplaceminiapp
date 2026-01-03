@@ -70,6 +70,8 @@
     function openViewerFromAlbum(list, startIndex = 0) {
       album = (list || []).map(s => (s || "").trim()).filter(Boolean);
       if (!album.length) return;
+
+      // ВАЖНО: сначала показываем viewer, потом ставим изображение
       viewer.classList.remove("hidden");
       document.body.style.overflow = "hidden";
       setImage(startIndex);
@@ -147,8 +149,10 @@
       startX = 0; startY = 0;
     });
 
-    // click to close
-    viewer.addEventListener("click", closeViewer);
+    // ✅ закрываем только если тапнули по фону, а не по картинке
+    viewer.addEventListener("click", (e) => {
+      if (e.target === viewer) closeViewer();
+    });
 
     // keyboard
     window.addEventListener("keydown", (e) => {
@@ -157,10 +161,14 @@
       if (e.key === "ArrowLeft"  && album.length) prev();
     });
 
-    // открытие viewer по клику на фото товаров/логотипа
+    // ✅ открытие viewer по клику на фото товаров/логотипа
+    // ВАЖНО: stopPropagation, чтобы клик не закрыл viewer сразу же
     document.body.addEventListener("click", (e) => {
       const img = e.target.closest(".thumb img, .hero-img img");
       if (!img) return;
+
+      e.preventDefault();
+      e.stopPropagation();
 
       const albumRaw = img.getAttribute("data-album") || "";
       const list = albumRaw
