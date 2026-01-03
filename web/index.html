@@ -42,6 +42,7 @@
   <div id="backdrop" class="backdrop hidden"></div>
 
   <script>
+    // ===== Viewer (Telegram-friendly): открытие по pointerup, листание, зум, свайп вниз закрыть =====
     const viewer = document.getElementById("imgViewer");
     const viewerImg = viewer.querySelector("img");
 
@@ -65,7 +66,6 @@
 
       viewer.classList.remove("hidden");
       document.body.style.overflow = "hidden";
-
       setImage(startIndex);
     }
 
@@ -85,9 +85,9 @@
     function prev() { setImage(idx - 1); }
 
     // Закрываем только если тап по фону (НЕ по img)
-    viewer.addEventListener("click", (e) => {
+    viewer.addEventListener("pointerup", (e) => {
       if (e.target === viewer) closeViewer();
-    });
+    }, { capture: true });
 
     // Touch start
     viewer.addEventListener("touchstart", (e) => {
@@ -152,8 +152,11 @@
       if (e.key === "ArrowLeft"  && album.length) prev();
     });
 
-    // 🔥 Открытие viewer (CAPTURE), чтобы не конфликтовать с другими кликами
-    document.addEventListener("click", (e) => {
+    // 🔥 Открытие viewer по pointerup (стабильнее, чем click в Telegram), capture=true
+    document.addEventListener("pointerup", (e) => {
+      // если viewer уже открыт — ничего не делаем
+      if (!viewer.classList.contains("hidden")) return;
+
       const img = e.target.closest(".thumb img, .hero-img img");
       if (!img) return;
 
@@ -166,7 +169,7 @@
         : [img.getAttribute("src")].filter(Boolean);
 
       openViewerFromAlbum(list, 0);
-    }, true); // 👈 capture = true
+    }, true);
   </script>
 
 </body>
