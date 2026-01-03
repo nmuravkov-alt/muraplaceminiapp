@@ -196,27 +196,33 @@ select{
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.9);
-  display: flex;
+
+  /* 🔥 Ключевое: когда закрыт — его нет вообще */
+  display: none;
+
   justify-content: center;
   align-items: center;
   z-index: 2000;
   cursor: zoom-out;
 
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity .18s ease;
+  /* чтобы в viewer не было “случайного” скролла страницы */
+  touch-action: none;
 }
+
 #imgViewer.show{
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
+  display: flex;          /* показываем только когда открыт */
 }
+
 #imgViewer img{
   max-width: 95%;
   max-height: 95%;
   border-radius: 12px;
   object-fit: contain;
+}
+
+/* (опционально) плавное появление без блокировки скролла */
+#imgViewer.show{
+  animation: viewerFade .18s ease;
 }
 
 /* Плавное появление */
