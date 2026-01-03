@@ -229,4 +229,21 @@ select{
 @keyframes viewerFade {
   from { opacity: 0; }
   to   { opacity: 1; }
+  /* 🔥 FIX: viewer реально исчезает и не блокирует скролл */
+#imgViewer.hidden { 
+  display: none !important; 
+  pointer-events: none !important;
+}
+
+#imgViewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  pointer-events: auto;
+  touch-action: none;
+}
 }
