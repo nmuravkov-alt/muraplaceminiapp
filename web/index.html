@@ -6,13 +6,8 @@
   <meta name="referrer" content="no-referrer"/>
   <title>LAYOUTPLACE Shop</title>
 
-  <!-- Стили с кэш-бастингом (ВАЖНО: абсолютный путь к /web) -->
   <link rel="stylesheet" href="/web/style.css?v=7"/>
-
-  <!-- Telegram SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <!-- Наш фронт (ВАЖНО: абсолютный путь к /web) -->
   <script src="/web/app.js?v=7" defer></script>
 </head>
 <body>
@@ -33,9 +28,7 @@
   </header>
 
   <main class="container">
-    <!-- Герой с логотипом (только на главной) -->
     <div id="hero" class="hero hidden"></div>
-
     <div id="categories" class="cat-grid"></div>
     <div id="products" class="products"></div>
   </main>
@@ -49,7 +42,6 @@
   <div id="backdrop" class="backdrop hidden"></div>
 
   <script>
-    // === Viewer с альбомом (свайп влево/вправо + зум + свайп вниз закрыть) ===
     const viewer = document.getElementById("imgViewer");
     const viewerImg = viewer.querySelector("img");
 
@@ -71,9 +63,9 @@
       album = (list || []).map(s => (s || "").trim()).filter(Boolean);
       if (!album.length) return;
 
-      // ВАЖНО: сначала показываем viewer, потом ставим изображение
       viewer.classList.remove("hidden");
       document.body.style.overflow = "hidden";
+
       setImage(startIndex);
     }
 
@@ -81,6 +73,7 @@
       viewer.classList.add("hidden");
       viewerImg.src = "";
       document.body.style.overflow = "";
+
       album = [];
       idx = 0;
       scale = 1;
@@ -91,7 +84,12 @@
     function next() { setImage(idx + 1); }
     function prev() { setImage(idx - 1); }
 
-    // touch start
+    // Закрываем только если тап по фону (НЕ по img)
+    viewer.addEventListener("click", (e) => {
+      if (e.target === viewer) closeViewer();
+    });
+
+    // Touch start
     viewer.addEventListener("touchstart", (e) => {
       if (e.touches.length === 1) {
         startX = e.touches[0].clientX;
@@ -104,13 +102,13 @@
       }
     }, { passive: true });
 
-    // touch move: pinch zoom + swipe down close
+    // Touch move (zoom + swipe down close)
     viewer.addEventListener("touchmove", (e) => {
-      // pinch zoom
       if (e.touches.length === 2 && startDist) {
         const dx = e.touches[1].clientX - e.touches[0].clientX;
         const dy = e.touches[1].clientY - e.touches[0].clientY;
         const newDist = Math.sqrt(dx*dx + dy*dy);
+
         scale *= newDist / startDist;
         startDist = newDist;
         scale = Math.max(1, Math.min(scale, 4));
@@ -118,14 +116,13 @@
         return;
       }
 
-      // swipe down close
       if (e.touches.length === 1 && startY) {
         const dy = e.touches[0].clientY - startY;
         if (dy > 140) closeViewer();
       }
     }, { passive: true });
 
-    // touch end: horizontal swipe to switch image
+    // Touch end (horizontal swipe)
     viewer.addEventListener("touchend", (e) => {
       if (!album.length) return;
 
@@ -140,7 +137,6 @@
       const dx = endX - startX;
       const dy = endY - startY;
 
-      // horizontal swipe
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) next();
         else prev();
@@ -149,21 +145,15 @@
       startX = 0; startY = 0;
     });
 
-    // ✅ закрываем только если тапнули по фону, а не по картинке
-    viewer.addEventListener("click", (e) => {
-      if (e.target === viewer) closeViewer();
-    });
-
-    // keyboard
+    // Клавиши
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !viewer.classList.contains("hidden")) closeViewer();
       if (e.key === "ArrowRight" && album.length) next();
       if (e.key === "ArrowLeft"  && album.length) prev();
     });
 
-    // ✅ открытие viewer по клику на фото товаров/логотипа
-    // ВАЖНО: stopPropagation, чтобы клик не закрыл viewer сразу же
-    document.body.addEventListener("click", (e) => {
+    // 🔥 Открытие viewer (CAPTURE), чтобы не конфликтовать с другими кликами
+    document.addEventListener("click", (e) => {
       const img = e.target.closest(".thumb img, .hero-img img");
       if (!img) return;
 
@@ -176,7 +166,7 @@
         : [img.getAttribute("src")].filter(Boolean);
 
       openViewerFromAlbum(list, 0);
-    });
+    }, true); // 👈 capture = true
   </script>
 
 </body>
