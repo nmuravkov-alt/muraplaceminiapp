@@ -5,10 +5,8 @@ document.addEventListener("DOMContentLoaded", () => {
 function initApp() {
   // ===== Telegram WebApp boot =====
   const tg = window.Telegram?.WebApp;
-  if (tg) {
-    tg.ready();
-    tg.expand?.();
-  }
+  tg?.ready?.();
+  tg?.expand?.();
 
   const MANAGER_USERNAME = "layoutplacebuy";
   const MANAGER_ID = 6773668793;
@@ -48,7 +46,14 @@ function initApp() {
   function bindTap(el, fn) {
     if (!el) return;
 
+    // iOS/Telegram может стрелять и pointerup и click -> анти-дабл
+    let last = 0;
+
     const handler = (e) => {
+      const now = Date.now();
+      if (now - last < 350) return;
+      last = now;
+
       try { e.preventDefault?.(); } catch {}
       try { e.stopPropagation?.(); } catch {}
       fn(e);
@@ -66,20 +71,16 @@ function initApp() {
     if(!u) return "";
     u = String(u).trim();
 
-    // локальные ассеты
     if (u.startsWith("/images/")) return u;
 
-    // Google Drive file link -> direct view
     const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
     if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
 
-    // GitHub raw with refs/heads/main -> canonical raw
     u = u.replace(
       /raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/refs\/heads\/main\//i,
       "raw.githubusercontent.com/$1/$2/main/"
     );
 
-    // query можно убрать
     const q = u.indexOf("?");
     if(q > -1) u = u.slice(0,q);
 
@@ -91,11 +92,9 @@ function initApp() {
     u = String(u).trim();
     if (u.startsWith("/images/")) return u;
 
-    // Drive -> direct
     const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
     if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
 
-    // query у видео НЕ режем
     u = u.replace(
       /raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/refs\/heads\/main\//i,
       "raw.githubusercontent.com/$1/$2/main/"
@@ -105,7 +104,11 @@ function initApp() {
   }
 
   // ===== API =====
-  const getJSON = url => fetch(url, { credentials: "same-origin" }).then(r => r.json());
+  const getJSON = (url) =>
+    fetch(url, { credentials: "same-origin" }).then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
 
   const loadConfig = async () => {
     try { return await getJSON(`${API}/api/config`); }
@@ -114,11 +117,128 @@ function initApp() {
 
   const loadCategories = () => getJSON(`${API}/api/categories`);
 
-  const loadProducts = c => {
+  const loadProducts = (c) => {
     const u = new URL(`${API}/api/products`, location.origin);
-    if(c) u.searchParams.set("category", c);
-    return getJSON(u);
+    if (c) u.searchParams.set("category", c);
+    return getJSON(u.toString());
   };
+
+  // ===== Sheet helpers (корзина/оформление) =====
+  function openSheet(html) {
+    if (sheet) sheet.innerHTML = html;
+    sheet?.classList?.remove("hidden");
+    backdrop?.classList?.remove("hidden");
+    if (backdrop) backdrop.onclick = closeSheet;
+  }
+
+  function closeSheet() {
+    sheet?.classList?.add("hidden");
+    backdrop?.classList?.add("hidden");
+    if (sheet) sheet.innerHTML = "";
+  }
+
+  // ===== Корзина =====
+  function openCart(){
+    if (!state.cart.length){
+      openSheet(`<div class="row"><b>Корзина пуста</b></div>`);
+      return;
+    }
+
+    const rows = state.cart.map((it,idx)=>`
+      <div class="row">
+        <div>
+          <div><b>${esc(it.title)}</b> ${it.size ? `[${esc(it.size)}]` : ""}</div>
+          <div>${money(it.price)} × ${it.qty}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button data-a="minus" data-i="${idx}">–</button>
+          <button data-a="plus"  data-i="${idx}">+</button>
+          <button data-a="rm"    data-i="${idx}">✕</button>
+        </div>
+      </div>
+    `).join("");
+
+    const total = state.cart.reduce((s,i)=>s+i.price*i.qty,0);
+
+    openSheet(`
+      <h3>Корзина</h3>
+      ${rows}
+      <div class="row"><b>Итого:</b><b>${money(total)}</b></div>
+      <button id="toCheckout" class="btn primary">Оформить</button>
+    `);
+
+    // ⚠️ важно: обработчик на sheet, а не document
+    sheet.onclick = (e)=>{
+      const a = e.target?.dataset?.a;
+      if(!a) return;
+      const i = Number(e.target.dataset.i);
+      if (Number.isNaN(i) || !state.cart[i]) return;
+
+      if(a==="plus")  state.cart[i].qty++;
+      if(a==="minus") state.cart[i].qty = Math.max(1, state.cart[i].qty-1);
+      if(a==="rm")    state.cart.splice(i,1);
+
+      updateCartBadge();
+      closeSheet(); openCart();
+    };
+
+    const toCheckout = $("#toCheckout");
+    if (toCheckout) toCheckout.onclick = () => { closeSheet(); openCheckout(); };
+  }
+
+  // ===== Оформление =====
+  function openCheckout(){
+    const total = state.cart.reduce((s,i)=>s+i.price*i.qty,0);
+
+    openSheet(`
+      <h3>Оформление</h3>
+      <div class="row"><label>ФИО</label><input id="fio" placeholder="Иванов Иван"/></div>
+      <div class="row"><label>Телефон (+7XXXXXXXXXX)</label><input id="phone" inputmode="tel" placeholder="+7XXXXXXXXXX"/></div>
+      <div class="row"><label>Адрес/СДЭК</label><textarea id="addr" rows="2" placeholder="Город, пункт выдачи..."></textarea></div>
+      <div class="row"><label>Комментарий</label><textarea id="comment" rows="2" placeholder="Например: размер L, цвет черный"></textarea></div>
+      <div class="row"><label>Telegram (для связи)</label><input id="tguser" placeholder="@username"/></div>
+      <div class="row"><b>Сумма:</b><b>${money(total)}</b></div>
+      <button id="submitOrder" class="btn primary">Отправить</button>
+    `);
+
+    const submit = $("#submitOrder");
+    if (!submit) return;
+
+    submit.onclick = async () => {
+      const fio   = $("#fio");
+      const phone = $("#phone");
+      const addr  = $("#addr");
+      const comm  = $("#comment");
+      const tguser= $("#tguser");
+
+      const okPhone = /^\+7\d{10}$/.test((phone?.value || "").trim());
+      [fio, phone].forEach(el=>el?.classList?.remove("bad"));
+
+      if (!fio?.value?.trim()) { fio?.classList?.add("bad"); return; }
+      if (!okPhone)            { phone?.classList?.add("bad"); return; }
+
+      const payload = {
+        full_name: fio.value.trim(),
+        phone: phone.value.trim(),
+        address: (addr?.value || "").trim(),
+        comment: (comm?.value || "").trim(),
+        telegram: (tguser?.value || "").trim(),
+        items: state.cart.map(it=>({ product_id: it.id, size: it.size, qty: it.qty }))
+      };
+
+      try { tg?.sendData?.(JSON.stringify(payload)); } catch {}
+      try {
+        await fetch(`${API}/api/order`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+      } catch {}
+
+      tg?.HapticFeedback?.notificationOccurred?.("success");
+      closeSheet();
+    };
+  }
 
   // ===== render home (видео/лого) =====
   function renderHome(logoUrl, videoUrl) {
@@ -175,7 +295,6 @@ function initApp() {
     if (v) v.play().catch(() => {});
   }
 
-  // ===== render categories/products =====
   function renderCategories(list){
     if (!categoriesEl) return;
     categoriesEl.innerHTML = "";
@@ -194,10 +313,8 @@ function initApp() {
     });
   }
 
-  // ✅ утилита: сделать альбом из images_urls + cover image_url
   function buildAlbum(p){
     const cover = normalizeImageUrl(p.image_url || p.image || "");
-
     let list = [];
     if (p.images_urls && String(p.images_urls).trim()) {
       list = String(p.images_urls)
@@ -205,11 +322,9 @@ function initApp() {
         .map(s => normalizeImageUrl(s))
         .filter(Boolean);
     }
-
     const album = [];
     if (cover) album.push(cover);
     for (const u of list) if (u && !album.includes(u)) album.push(u);
-
     return album;
   }
 
@@ -272,7 +387,6 @@ function initApp() {
       `;
       productsEl.appendChild(card);
 
-      // ===== swipe logic for gallery =====
       const gallery = card.querySelector(".gallery");
       if (gallery) {
         const track = gallery.querySelector(".gallery-track");
@@ -330,13 +444,17 @@ function initApp() {
         });
       }
 
-      // ===== add to cart =====
       const btn = $("#btn-" + p.id);
       if (btn) {
         btn.onclick = () => {
           const sel = $("#size-" + p.id);
           const size = sel ? sel.value : "";
-          state.cart.push({ id:p.id, title:p.title, price:p.price, size, qty:1 });
+
+          const key = `${p.id}:${size || ""}`;
+          const f = state.cart.find(it => it.key === key);
+          if (f) f.qty += 1;
+          else state.cart.push({ key, id:p.id, title:p.title, price:p.price, size, qty:1 });
+
           updateCartBadge();
           tg?.HapticFeedback?.impactOccurred?.("medium");
         };
@@ -345,7 +463,6 @@ function initApp() {
   }
 
   // ====== FIX: Telegram iOS кнопки не нажимаются ======
-  // ВАЖНО: это требует функций openCart/openCheckout (они у тебя уже есть в app.js)
   bindTap(writeBtn, () => {
     const url = MANAGER_USERNAME
       ? `https://t.me/${MANAGER_USERNAME}`
@@ -356,14 +473,8 @@ function initApp() {
     else window.location.href = url;
   });
 
-  bindTap(cartBtn, () => {
-    // если функция существует ниже по файлу — откроется шторка корзины
-    if (typeof openCart === "function") openCart();
-  });
-
-  bindTap(checkoutBtn, () => {
-    if (typeof openCheckout === "function") openCheckout();
-  });
+  bindTap(cartBtn, () => openCart());
+  bindTap(checkoutBtn, () => openCheckout());
 
   // ===== init =====
   (async()=>{
