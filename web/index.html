@@ -42,180 +42,175 @@
   <div id="sheet" class="sheet hidden"></div>
   <div id="backdrop" class="backdrop hidden"></div>
 
+  <!-- ✅ Viewer script: ОБЁРНУТ В try/catch чтобы НЕ ЛОМАТЬ приложение -->
   <script>
-    const viewer = document.getElementById("imgViewer");
-    const viewerImg = viewer.querySelector("img");
-    const viewerDots = document.getElementById("viewerDots");
+  (function () {
+    try {
+      const viewer = document.getElementById("imgViewer");
+      const viewerImg = viewer ? viewer.querySelector("img") : null;
+      const viewerDots = document.getElementById("viewerDots");
 
-    let album = [];
-    let idx = 0;
+      if (!viewer || !viewerImg) return;
 
-    let startX = 0, startY = 0;
-    let scale = 1, startDist = 0;
-    let moved = false;
+      let album = [];
+      let idx = 0;
 
-    function renderDots() {
-      if (!viewerDots) return;
-      if (!album.length || album.length <= 1) {
-        viewerDots.innerHTML = "";
-        return;
-      }
-      viewerDots.innerHTML = album
-        .map((_, i) => `<span class="viewer-dot ${i === idx ? "active" : ""}"></span>`)
-        .join("");
-    }
+      let startX = 0, startY = 0;
+      let scale = 1, startDist = 0;
+      let moved = false;
 
-    function setImage(i) {
-      if (!album.length) return;
-      idx = (i + album.length) % album.length;
-      viewerImg.src = album[idx];
-      scale = 1;
-      viewerImg.style.transform = "scale(1)";
-      renderDots();
-    }
-
-    function openViewerFromAlbum(list, startIndex = 0) {
-      album = (list || []).map(s => (s || "").trim()).filter(Boolean);
-      if (!album.length) return;
-
-      viewer.classList.remove("hidden");
-      document.body.style.overflow = "hidden";
-      setImage(startIndex);
-    }
-
-    function closeViewer() {
-      viewer.classList.add("hidden");
-      viewerImg.src = "";
-      document.body.style.overflow = "";
-
-      album = [];
-      idx = 0;
-      scale = 1;
-      startDist = 0;
-      viewerImg.style.transform = "scale(1)";
-      if (viewerDots) viewerDots.innerHTML = "";
-    }
-
-    function next() { setImage(idx + 1); }
-    function prev() { setImage(idx - 1); }
-
-    // ====== ✅ TAP-навигация по фото (левая/правая зона) ======
-    function handleTapNav(clientX) {
-      if (!album.length) return;
-      // если увеличено — не листаем тапом
-      if (scale > 1.01) return;
-
-      const w = window.innerWidth || document.documentElement.clientWidth || 1;
-      const leftZone = w * 0.33;
-      const rightZone = w * 0.66;
-
-      if (clientX < leftZone) prev();
-      else if (clientX > rightZone) next();
-      else closeViewer(); // центр — закрыть
-    }
-
-    // Закрытие по тапу на фон
-    viewer.addEventListener("click", (e) => {
-      if (e.target === viewer) closeViewer();
-    }, true);
-
-    // ✅ Тап по самому изображению → prev/next/close
-    viewerImg.addEventListener("click", (e) => {
-      // click на iOS иногда приходит после touchend — нормально
-      // если был свайп/движение — игнор
-      if (moved) return;
-      handleTapNav(e.clientX);
-    }, true);
-
-    // Touch start
-    viewer.addEventListener("touchstart", (e) => {
-      moved = false;
-
-      if (e.touches.length === 1) {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-      }
-      if (e.touches.length === 2) {
-        const dx = e.touches[1].clientX - e.touches[0].clientX;
-        const dy = e.touches[1].clientY - e.touches[0].clientY;
-        startDist = Math.sqrt(dx*dx + dy*dy);
-      }
-    }, { passive: true });
-
-    // Touch move (zoom + отметка что двигали)
-    viewer.addEventListener("touchmove", (e) => {
-      moved = true;
-
-      if (e.touches.length === 2 && startDist) {
-        const dx = e.touches[1].clientX - e.touches[0].clientX;
-        const dy = e.touches[1].clientY - e.touches[0].clientY;
-        const newDist = Math.sqrt(dx*dx + dy*dy);
-
-        scale *= newDist / startDist;
-        startDist = newDist;
-        scale = Math.max(1, Math.min(scale, 4));
-        viewerImg.style.transform = `scale(${scale})`;
-        return;
-      }
-    }, { passive: true });
-
-    // Touch end: свайп или тап (если не двигали)
-    viewer.addEventListener("touchend", (e) => {
-      if (!album.length) return;
-
-      startDist = 0;
-
-      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
-      if (!t) return;
-
-      const endX = t.clientX;
-      const endY = t.clientY;
-
-      const dx = endX - startX;
-      const dy = endY - startY;
-
-      // ✅ горизонтальный свайп
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-        if (dx < 0) next();
-        else prev();
-      } else {
-        // ✅ это тап (или почти тап)
-        if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
-          handleTapNav(endX);
+      function renderDots() {
+        if (!viewerDots) return;
+        if (!album.length || album.length <= 1) {
+          viewerDots.innerHTML = "";
+          return;
         }
-        // ✅ свайп вниз закрыть
-        if (dy > 140) closeViewer();
+        viewerDots.innerHTML = album
+          .map((_, i) => `<span class="viewer-dot ${i === idx ? "active" : ""}"></span>`)
+          .join("");
       }
 
-      startX = 0; startY = 0;
-      // сброс moved чуть позже, чтобы click не “перебил”
-      setTimeout(() => { moved = false; }, 0);
-    }, { passive: true });
+      function setImage(i) {
+        if (!album.length) return;
+        idx = (i + album.length) % album.length;
+        viewerImg.src = album[idx];
+        scale = 1;
+        viewerImg.style.transform = "scale(1)";
+        renderDots();
+      }
 
-    // Клавиши
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !viewer.classList.contains("hidden")) closeViewer();
-      if (e.key === "ArrowRight" && album.length) next();
-      if (e.key === "ArrowLeft"  && album.length) prev();
-    });
+      function openViewerFromAlbum(list, startIndex = 0) {
+        album = (list || []).map(s => (s || "").trim()).filter(Boolean);
+        if (!album.length) return;
 
-    // ===== ✅ Открытие viewer из карточек/hero =====
-    document.addEventListener("click", (e) => {
-      if (!viewer.classList.contains("hidden")) return;
+        viewer.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+        setImage(startIndex);
+      }
 
-      const img = e.target.closest(".thumb img, .hero-img img");
-      if (!img) return;
+      function closeViewer() {
+        viewer.classList.add("hidden");
+        viewerImg.src = "";
+        document.body.style.overflow = "";
 
-      e.preventDefault();
-      e.stopPropagation();
+        album = [];
+        idx = 0;
+        scale = 1;
+        startDist = 0;
+        viewerImg.style.transform = "scale(1)";
+        if (viewerDots) viewerDots.innerHTML = "";
+      }
 
-      const albumRaw = img.getAttribute("data-album") || "";
-      const list = albumRaw
-        ? albumRaw.split("|").map(s => s.trim()).filter(Boolean)
-        : [img.getAttribute("src")].filter(Boolean);
+      function next() { setImage(idx + 1); }
+      function prev() { setImage(idx - 1); }
 
-      openViewerFromAlbum(list, 0);
-    }, true);
+      function tapNav(clientX) {
+        if (!album.length) return;
+        if (scale > 1.01) return;
+
+        const w = window.innerWidth || document.documentElement.clientWidth || 1;
+        if (clientX < w * 0.33) prev();
+        else if (clientX > w * 0.66) next();
+        else closeViewer();
+      }
+
+      // ✅ Открытие по тапу на карточке/hero (САМОЕ ВАЖНОЕ)
+      document.addEventListener("click", (e) => {
+        if (!viewer.classList.contains("hidden")) return;
+
+        const img = e.target.closest(".thumb img, .hero-img img, .gallery-slide img");
+        if (!img) return;
+
+        const albumRaw = img.getAttribute("data-album") || "";
+        const list = albumRaw
+          ? albumRaw.split("|").map(s => s.trim()).filter(Boolean)
+          : [img.getAttribute("src")].filter(Boolean);
+
+        if (!list.length) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        openViewerFromAlbum(list, 0);
+      }, true);
+
+      // ✅ Закрыть по фону
+      viewer.addEventListener("click", (e) => {
+        if (e.target === viewer) closeViewer();
+      }, true);
+
+      // ✅ Тап по фото → листать/закрыть
+      viewerImg.addEventListener("click", (e) => {
+        if (moved) return;
+        tapNav(e.clientX);
+      }, true);
+
+      // Touch start
+      viewer.addEventListener("touchstart", (e) => {
+        moved = false;
+
+        if (e.touches.length === 1) {
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+        }
+        if (e.touches.length === 2) {
+          const dx = e.touches[1].clientX - e.touches[0].clientX;
+          const dy = e.touches[1].clientY - e.touches[0].clientY;
+          startDist = Math.sqrt(dx*dx + dy*dy);
+        }
+      }, { passive: true });
+
+      // Touch move (zoom)
+      viewer.addEventListener("touchmove", (e) => {
+        moved = true;
+
+        if (e.touches.length === 2 && startDist) {
+          const dx = e.touches[1].clientX - e.touches[0].clientX;
+          const dy = e.touches[1].clientY - e.touches[0].clientY;
+          const newDist = Math.sqrt(dx*dx + dy*dy);
+
+          scale *= newDist / startDist;
+          startDist = newDist;
+          scale = Math.max(1, Math.min(scale, 4));
+          viewerImg.style.transform = `scale(${scale})`;
+        }
+      }, { passive: true });
+
+      // Touch end (swipe/tap)
+      viewer.addEventListener("touchend", (e) => {
+        if (!album.length) return;
+        startDist = 0;
+
+        const t = e.changedTouches && e.changedTouches[0];
+        if (!t) return;
+
+        const endX = t.clientX;
+        const endY = t.clientY;
+
+        const dx = endX - startX;
+        const dy = endY - startY;
+
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+          if (dx < 0) next();
+          else prev();
+        } else {
+          if (Math.abs(dx) < 12 && Math.abs(dy) < 12) tapNav(endX);
+          if (dy > 140) closeViewer();
+        }
+
+        startX = 0; startY = 0;
+        setTimeout(() => { moved = false; }, 0);
+      }, { passive: true });
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !viewer.classList.contains("hidden")) closeViewer();
+        if (e.key === "ArrowRight" && album.length) next();
+        if (e.key === "ArrowLeft"  && album.length) prev();
+      });
+    } catch (err) {
+      // ✅ даже если ошибка — app.js продолжит работать
+      console.error("Viewer init error:", err);
+    }
+  })();
   </script>
 
 </body>
