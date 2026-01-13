@@ -44,6 +44,23 @@ function initApp() {
     cartCount.textContent = state.cart.reduce((s,i)=>s+i.qty,0);
   }
 
+  // ✅ FIX: Telegram iOS "кнопки не нажимаются" -> pointerup + click
+  function bindTap(el, fn) {
+    if (!el) return;
+
+    const handler = (e) => {
+      try { e.preventDefault?.(); } catch {}
+      try { e.stopPropagation?.(); } catch {}
+      fn(e);
+    };
+
+    el.addEventListener("pointerup", handler, { passive: false });
+    el.addEventListener("click", handler, { passive: false });
+
+    el.style.touchAction = "manipulation";
+    el.style.webkitTapHighlightColor = "transparent";
+  }
+
   // ✅ Нормализация ссылок (Drive/GitHub/jsDelivr/локальные)
   function normalizeImageUrl(u){
     if(!u) return "";
@@ -62,7 +79,7 @@ function initApp() {
       "raw.githubusercontent.com/$1/$2/main/"
     );
 
-    // jsDelivr ok, query можно убрать
+    // query можно убрать
     const q = u.indexOf("?");
     if(q > -1) u = u.slice(0,q);
 
@@ -179,10 +196,8 @@ function initApp() {
 
   // ✅ утилита: сделать альбом из images_urls + cover image_url
   function buildAlbum(p){
-    // 1) cover
     const cover = normalizeImageUrl(p.image_url || p.image || "");
 
-    // 2) gallery from images_urls (ВАЖНО: именно images_urls)
     let list = [];
     if (p.images_urls && String(p.images_urls).trim()) {
       list = String(p.images_urls)
@@ -191,7 +206,6 @@ function initApp() {
         .filter(Boolean);
     }
 
-    // 3) cover первой (если есть)
     const album = [];
     if (cover) album.push(cover);
     for (const u of list) if (u && !album.includes(u)) album.push(u);
@@ -212,7 +226,6 @@ function initApp() {
 
       const desc = (p.description || "").trim();
 
-      // ✅ ГАЛЕРЕЯ: берём только из images_urls (+ image_url как cover)
       const album = buildAlbum(p);
       const hasGallery = album.length > 0;
 
@@ -276,7 +289,6 @@ function initApp() {
           if (dots.length) dots.forEach((d,i)=>d.classList.toggle("active", i===gIdx));
         };
 
-        // touch swipe
         let startX = 0, startY = 0, dx = 0, dragging = false;
 
         gallery.addEventListener("touchstart", (e) => {
@@ -294,8 +306,6 @@ function initApp() {
           const t = e.touches[0];
           const moveX = t.clientX - startX;
           const moveY = t.clientY - startY;
-
-          // если вертикальный скролл — не мешаем
           if (Math.abs(moveY) > Math.abs(moveX)) return;
 
           dx = moveX;
@@ -309,10 +319,9 @@ function initApp() {
           const threshold = 40;
           if (dx > threshold && gIdx > 0) setIdx(gIdx - 1);
           else if (dx < -threshold && gIdx < count - 1) setIdx(gIdx + 1);
-          else setIdx(gIdx); // вернуть назад
+          else setIdx(gIdx);
         });
 
-        // если картинка не грузится — прячем всю галерею (чтобы не было "битых")
         gallery.querySelectorAll("img").forEach(img=>{
           img.onerror = () => {
             const th = img.closest(".thumb");
@@ -334,6 +343,27 @@ function initApp() {
       }
     });
   }
+
+  // ====== FIX: Telegram iOS кнопки не нажимаются ======
+  // ВАЖНО: это требует функций openCart/openCheckout (они у тебя уже есть в app.js)
+  bindTap(writeBtn, () => {
+    const url = MANAGER_USERNAME
+      ? `https://t.me/${MANAGER_USERNAME}`
+      : `tg://user?id=${MANAGER_ID}`;
+
+    if (tg?.openLink && url.startsWith("https://")) tg.openLink(url);
+    else if (tg?.openTelegramLink && url.startsWith("tg://")) tg.openTelegramLink(url);
+    else window.location.href = url;
+  });
+
+  bindTap(cartBtn, () => {
+    // если функция существует ниже по файлу — откроется шторка корзины
+    if (typeof openCart === "function") openCart();
+  });
+
+  bindTap(checkoutBtn, () => {
+    if (typeof openCheckout === "function") openCheckout();
+  });
 
   // ===== init =====
   (async()=>{
