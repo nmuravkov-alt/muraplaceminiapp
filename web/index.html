@@ -44,7 +44,7 @@
   <div id="backdrop" class="backdrop hidden"></div>
 
   <script>
-    // ===== Viewer (Telegram-friendly): открытие по pointerup, листание, зум, свайп вниз закрыть =====
+    // ===== Viewer (Telegram-friendly): tap/click open + swipe left/right + pinch zoom + swipe down close =====
     const viewer = document.getElementById("imgViewer");
     const viewerImg = viewer.querySelector("img");
     const viewerDots = document.getElementById("viewerDots");
@@ -88,7 +88,6 @@
       viewer.classList.add("hidden");
       viewerImg.src = "";
       document.body.style.overflow = "";
-
       album = [];
       idx = 0;
       scale = 1;
@@ -100,10 +99,10 @@
     function next() { setImage(idx + 1); }
     function prev() { setImage(idx - 1); }
 
-    // Закрываем только если тап по фону (НЕ по img)
-    viewer.addEventListener("pointerup", (e) => {
+    // ✅ закрытие по тапу на фон (click работает стабильнее на iOS Telegram)
+    viewer.addEventListener("click", (e) => {
       if (e.target === viewer) closeViewer();
-    }, { capture: true });
+    }, true);
 
     // Touch start
     viewer.addEventListener("touchstart", (e) => {
@@ -141,7 +140,6 @@
     // Touch end (horizontal swipe)
     viewer.addEventListener("touchend", (e) => {
       if (!album.length) return;
-
       startDist = 0;
 
       const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
@@ -168,9 +166,19 @@
       if (e.key === "ArrowLeft"  && album.length) prev();
     });
 
-    // 🔥 Открытие viewer по pointerup (стабильнее, чем click в Telegram), capture=true
-    document.addEventListener("pointerup", (e) => {
-      // если viewer уже открыт — ничего не делаем
+    // ===== ✅ ОТКРЫТИЕ viewer: click + tap(touchend) (iOS Telegram фикс) =====
+    function openFromImg(img) {
+      const albumRaw = img.getAttribute("data-album") || "";
+      const list = albumRaw
+        ? albumRaw.split("|").map(s => s.trim()).filter(Boolean)
+        : [img.getAttribute("src")].filter(Boolean);
+
+      const startIndex = Number(img.dataset.index || 0);
+      openViewerFromAlbum(list, startIndex);
+    }
+
+    // 1) click (Android/desktop/часть iOS)
+    document.addEventListener("click", (e) => {
       if (!viewer.classList.contains("hidden")) return;
 
       const img = e.target.closest(".thumb img, .hero-img img");
@@ -178,14 +186,40 @@
 
       e.preventDefault();
       e.stopPropagation();
-
-      const albumRaw = img.getAttribute("data-album") || "";
-      const list = albumRaw
-        ? albumRaw.split("|").map(s => s.trim()).filter(Boolean)
-        : [img.getAttribute("src")].filter(Boolean);
-
-      openViewerFromAlbum(list, 0);
+      openFromImg(img);
     }, true);
+
+    // 2) tap через touchend (iOS Telegram)
+    let tStartX = 0, tStartY = 0, tStartTarget = null;
+
+    document.addEventListener("touchstart", (e) => {
+      if (!viewer.classList.contains("hidden")) return;
+
+      const img = e.target.closest(".thumb img, .hero-img img");
+      if (!img) return;
+
+      const t = e.touches[0];
+      tStartX = t.clientX;
+      tStartY = t.clientY;
+      tStartTarget = img;
+    }, { passive: true, capture: true });
+
+    document.addEventListener("touchend", (e) => {
+      if (!viewer.classList.contains("hidden")) return;
+      if (!tStartTarget) return;
+
+      const t = e.changedTouches[0];
+      const dx = t.clientX - tStartX;
+      const dy = t.clientY - tStartY;
+
+      // если движение маленькое — это тап, не свайп
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+        openFromImg(tStartTarget);
+      }
+
+      tStartTarget = null;
+      tStartX = 0; tStartY = 0;
+    }, { passive: true, capture: true });
   </script>
 
 </body>
