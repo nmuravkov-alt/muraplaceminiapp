@@ -68,6 +68,65 @@ body {
   cursor: zoom-in;
 }
 
+/* ===== Gallery (свайп + точки) ===== */
+.gallery{
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y; /* вертикальный скролл оставляем */
+}
+
+.gallery-track{
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transform: translateX(0);
+  transition: transform .22s ease;
+  will-change: transform;
+}
+
+.gallery-slide{
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+}
+
+.gallery-slide img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: zoom-in;
+}
+
+/* точки */
+.gallery-dots{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.gallery-dot{
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.45);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.12);
+}
+
+.gallery-dot.active{
+  background: rgba(255,255,255,.95);
+}
+
 /* ========== ФОРМЫ / КНОПКИ ========== */
 select{
   appearance:none; width:100%;
@@ -215,6 +274,29 @@ select{
   max-height: 95%;
   border-radius: 12px;
   object-fit: contain;
+}
+
+/* dots в fullscreen viewer */
+#viewerDots{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+#viewerDots .viewer-dot{
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.45);
+}
+
+#viewerDots .viewer-dot.active{
+  background: rgba(255,255,255,.95);
 }
 
 /* опционально: плавное появление */
