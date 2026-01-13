@@ -49,25 +49,42 @@ def upsert_setting(cur, key: str, value: str) -> bool:
 def insert_product(cur, row: dict) -> bool:
     """
     Обычная вставка товара.
+
     Поддерживаемые поля CSV (регистр не важен):
-      title, category, subcategory, price, image_url,
+      title, category, subcategory, price,
+      image_url, images_urls,
       sizes_text|sizes, is_active, description
+
+    images_urls: несколько ссылок через | (pipe)
+      пример: url1|url2|url3
     """
     title = (row.get("title") or "").strip()
     if not title or title in ("__LOGO__", "__HERO__"):
         return False  # спец-строки не пишем в products
 
+    image_url = (row.get("image_url") or "").strip()
+    images_urls = (row.get("images_urls") or "").strip()
+
+    # если галерея пустая, но есть image_url — используем image_url как 1 фото
+    if not images_urls and image_url:
+        images_urls = image_url
+
     cur.execute(
         """
-        INSERT INTO products(title, category, subcategory, price, image_url, sizes, is_active, description)
-        VALUES(?,?,?,?,?,?,?,?)
+        INSERT INTO products(
+            title, category, subcategory, price,
+            image_url, images_urls,
+            sizes, is_active, description
+        )
+        VALUES(?,?,?,?,?,?,?,?,?)
         """,
         (
             title,
             (row.get("category") or "").strip(),
             (row.get("subcategory") or "").strip(),
             as_int(row.get("price"), 0),
-            (row.get("image_url") or "").strip(),
+            image_url,
+            images_urls,
             (row.get("sizes_text") or row.get("sizes") or "").replace(" ", ""),
             as_int(row.get("is_active"), 1),
             (row.get("description") or "").strip(),
@@ -101,17 +118,16 @@ def seed_from_csv(csv_path: str, clear: bool):
 
                 title = (row.get("title") or "").strip().upper()
 
-                # Спец-строка для ЛОГОТИПА (старая механика)
+                # Спец-строка для ЛОГОТИПА
                 if title == "__LOGO__":
                     url = row.get("logo_url") or row.get("image_url") or ""
                     if upsert_setting(cur, "logo_url", url):
                         logo_set = True
                     continue
 
-                # Спец-строка для ВИДЕО/ГЕРОЯ (новая механика)
+                # Спец-строка для ВИДЕО/ГЕРОЯ
                 if title == "__HERO__":
                     url = row.get("hero_url") or row.get("image_url") or ""
-                    # сюда клади mp4/gif/и т.п.; локальные пути типа /images/.... тоже ок
                     if upsert_setting(cur, "hero_video_url", url):
                         hero_set = True
                     continue
@@ -124,8 +140,10 @@ def seed_from_csv(csv_path: str, clear: bool):
 
     msg = f"✅ Imported {inserted} products from {path} into {DB_PATH}"
     extras = []
-    if logo_set: extras.append("logo_url saved")
-    if hero_set: extras.append("hero_video_url saved")
+    if logo_set:
+        extras.append("logo_url saved")
+    if hero_set:
+        extras.append("hero_video_url saved")
     if extras:
         msg += " (" + ", ".join(extras) + ")"
     print(msg)
@@ -137,7 +155,6 @@ def main():
     ap.add_argument("--clear", action="store_true", help="Delete all products before import")
     args = ap.parse_args()
 
-    # если csv не указан флагом, берём из ENV/дефолта
     csv_path = args.csv or CSV_FILE
     seed_from_csv(csv_path, clear=args.clear)
 
