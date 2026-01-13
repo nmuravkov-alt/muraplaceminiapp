@@ -15,6 +15,8 @@
   <!-- ===== Полноэкранный просмотр фото ===== -->
   <div id="imgViewer" class="hidden">
     <img src="" alt="preview"/>
+    <!-- ✅ точки (индикаторы) для галереи -->
+    <div id="viewerDots"></div>
   </div>
 
   <header class="topbar">
@@ -45,6 +47,7 @@
     // ===== Viewer (Telegram-friendly): открытие по pointerup, листание, зум, свайп вниз закрыть =====
     const viewer = document.getElementById("imgViewer");
     const viewerImg = viewer.querySelector("img");
+    const viewerDots = document.getElementById("viewerDots");
 
     let album = [];
     let idx = 0;
@@ -52,12 +55,24 @@
     let startX = 0, startY = 0;
     let scale = 1, startDist = 0;
 
+    function renderDots() {
+      if (!viewerDots) return;
+      if (!album.length || album.length <= 1) {
+        viewerDots.innerHTML = "";
+        return;
+      }
+      viewerDots.innerHTML = album
+        .map((_, i) => `<span class="viewer-dot ${i === idx ? "active" : ""}"></span>`)
+        .join("");
+    }
+
     function setImage(i) {
       if (!album.length) return;
       idx = (i + album.length) % album.length;
       viewerImg.src = album[idx];
       scale = 1;
       viewerImg.style.transform = "scale(1)";
+      renderDots();
     }
 
     function openViewerFromAlbum(list, startIndex = 0) {
@@ -79,6 +94,7 @@
       scale = 1;
       startDist = 0;
       viewerImg.style.transform = "scale(1)";
+      if (viewerDots) viewerDots.innerHTML = "";
     }
 
     function next() { setImage(idx + 1); }
