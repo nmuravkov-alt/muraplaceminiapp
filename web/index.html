@@ -42,7 +42,7 @@
   <div id="sheet" class="sheet hidden"></div>
   <div id="backdrop" class="backdrop hidden"></div>
 
-  <!-- ✅ Viewer script: ОБЁРНУТ В try/catch чтобы НЕ ЛОМАТЬ приложение -->
+  <!-- ✅ Viewer script: try/catch + фикс iOS "двойного шага" (touchend + click) -->
   <script>
   (function () {
     try {
@@ -58,6 +58,9 @@
       let startX = 0, startY = 0;
       let scale = 1, startDist = 0;
       let moved = false;
+
+      // ✅ анти-двойной клик: iOS после touch часто стреляет click
+      let lastTouchAt = 0;
 
       function renderDots() {
         if (!viewerDots) return;
@@ -114,8 +117,11 @@
         else closeViewer();
       }
 
-      // ✅ Открытие по тапу на карточке/hero (САМОЕ ВАЖНОЕ)
+      // ✅ Открытие по тапу на карточке/hero
       document.addEventListener("click", (e) => {
+        // ✅ если только что был touch — игнорим click
+        if (Date.now() - lastTouchAt < 450) return;
+
         if (!viewer.classList.contains("hidden")) return;
 
         const img = e.target.closest(".thumb img, .hero-img img, .gallery-slide img");
@@ -135,11 +141,13 @@
 
       // ✅ Закрыть по фону
       viewer.addEventListener("click", (e) => {
+        if (Date.now() - lastTouchAt < 450) return; // ✅
         if (e.target === viewer) closeViewer();
       }, true);
 
       // ✅ Тап по фото → листать/закрыть
       viewerImg.addEventListener("click", (e) => {
+        if (Date.now() - lastTouchAt < 450) return; // ✅
         if (moved) return;
         tapNav(e.clientX);
       }, true);
@@ -177,6 +185,8 @@
 
       // Touch end (swipe/tap)
       viewer.addEventListener("touchend", (e) => {
+        lastTouchAt = Date.now(); // ✅ ключевой фикс: блокируем следом идущий click
+
         if (!album.length) return;
         startDist = 0;
 
@@ -207,7 +217,6 @@
         if (e.key === "ArrowLeft"  && album.length) prev();
       });
     } catch (err) {
-      // ✅ даже если ошибка — app.js продолжит работать
       console.error("Viewer init error:", err);
     }
   })();
