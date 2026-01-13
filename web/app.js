@@ -44,32 +44,46 @@ function initApp() {
     cartCount.textContent = state.cart.reduce((s,i)=>s+i.qty,0);
   }
 
-  // Для картинок можно резать query, для видео — НЕ режем (часто нужно)
+  // ✅ Нормализация ссылок (Drive/GitHub/jsDelivr/локальные)
   function normalizeImageUrl(u){
-    if(!u) return "";
-    u = String(u).trim();
-
-    // если локальные ассеты
-    if (u.startsWith("/images/")) return u;
-
-    const q = u.indexOf("?");
-    if(q > -1) u = u.slice(0,q);
-
-    const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
-    if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
-    return u;
-  }
-
-  function normalizeVideoUrl(u){
     if(!u) return "";
     u = String(u).trim();
 
     // локальные ассеты
     if (u.startsWith("/images/")) return u;
 
-    // НЕ режем ?query у видео
+    // Google Drive file link -> direct view
     const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
     if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+
+    // GitHub raw with refs/heads/main -> canonical raw
+    u = u.replace(
+      /raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/refs\/heads\/main\//i,
+      "raw.githubusercontent.com/$1/$2/main/"
+    );
+
+    // jsDelivr ok, query можно убрать
+    const q = u.indexOf("?");
+    if(q > -1) u = u.slice(0,q);
+
+    return u;
+  }
+
+  function normalizeVideoUrl(u){
+    if(!u) return "";
+    u = String(u).trim();
+    if (u.startsWith("/images/")) return u;
+
+    // Drive -> direct
+    const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+    if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+
+    // query у видео НЕ режем
+    u = u.replace(
+      /raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/refs\/heads\/main\//i,
+      "raw.githubusercontent.com/$1/$2/main/"
+    );
+
     return u;
   }
 
@@ -131,7 +145,6 @@ function initApp() {
 
     heroEl.appendChild(box);
 
-    // (опционально) подпись
     const tagline = document.createElement("div");
     tagline.className = "subtitle";
     tagline.style.textAlign = "center";
@@ -141,11 +154,8 @@ function initApp() {
 
     heroEl.classList.remove("hidden");
 
-    // пробуем автоплей; если нельзя — останется poster (превью)
     const v = heroEl.querySelector("video");
-    if (v) {
-      v.play().catch(() => {});
-    }
+    if (v) v.play().catch(() => {});
   }
 
   // ===== render categories/products =====
@@ -167,6 +177,28 @@ function initApp() {
     });
   }
 
+  // ✅ утилита: сделать альбом из images_urls + cover image_url
+  function buildAlbum(p){
+    // 1) cover
+    const cover = normalizeImageUrl(p.image_url || p.image || "");
+
+    // 2) gallery from images_urls (ВАЖНО: именно images_urls)
+    let list = [];
+    if (p.images_urls && String(p.images_urls).trim()) {
+      list = String(p.images_urls)
+        .split("|")
+        .map(s => normalizeImageUrl(s))
+        .filter(Boolean);
+    }
+
+    // 3) cover первой (если есть)
+    const album = [];
+    if (cover) album.push(cover);
+    for (const u of list) if (u && !album.includes(u)) album.push(u);
+
+    return album;
+  }
+
   async function drawProducts(){
     if (!productsEl) return;
     productsEl.innerHTML = "";
@@ -180,24 +212,10 @@ function initApp() {
 
       const desc = (p.description || "").trim();
 
-      // ====== ГАЛЕРЕЯ ======
-      // 1) основной альбом из p.images_urls (url1|url2|url3)
-      let album = [];
-      if (p.images_urls && String(p.images_urls).trim()) {
-        album = String(p.images_urls)
-          .split("|")
-          .map(s => normalizeImageUrl(s))
-          .filter(Boolean);
-      }
-
-      // 2) fallback на image_url
-      const cover = normalizeImageUrl(p.image_url || p.image || "");
-      if (cover && !album.includes(cover)) album.unshift(cover);
-
-      // 3) если альбом пуст — просто не показываем превью
+      // ✅ ГАЛЕРЕЯ: берём только из images_urls (+ image_url как cover)
+      const album = buildAlbum(p);
       const hasGallery = album.length > 0;
 
-      // HTML галереи (свайп + точки) + data-album для fullscreen viewer
       const galleryHtml = hasGallery ? `
         <div class="thumb">
           <div class="gallery" data-images-count="${album.length}">
@@ -252,7 +270,7 @@ function initApp() {
         let gIdx = 0;
         const setIdx = (n, animate=true) => {
           if (!track || count <= 0) return;
-          gIdx = (n + count) % count;
+          gIdx = Math.max(0, Math.min(n, count - 1));
           track.style.transition = animate ? "transform .22s ease" : "none";
           track.style.transform = `translateX(${-gIdx * 100}%)`;
           if (dots.length) dots.forEach((d,i)=>d.classList.toggle("active", i===gIdx));
@@ -289,12 +307,12 @@ function initApp() {
           dragging = false;
 
           const threshold = 40;
-          if (dx > threshold) setIdx(gIdx - 1);
-          else if (dx < -threshold) setIdx(gIdx + 1);
+          if (dx > threshold && gIdx > 0) setIdx(gIdx - 1);
+          else if (dx < -threshold && gIdx < count - 1) setIdx(gIdx + 1);
           else setIdx(gIdx); // вернуть назад
         });
 
-        // если картинки не грузятся — скрываем превью
+        // если картинка не грузится — прячем всю галерею (чтобы не было "битых")
         gallery.querySelectorAll("img").forEach(img=>{
           img.onerror = () => {
             const th = img.closest(".thumb");
@@ -309,10 +327,7 @@ function initApp() {
         btn.onclick = () => {
           const sel = $("#size-" + p.id);
           const size = sel ? sel.value : "";
-
-          // (минимально) добавляем в корзину
           state.cart.push({ id:p.id, title:p.title, price:p.price, size, qty:1 });
-
           updateCartBadge();
           tg?.HapticFeedback?.impactOccurred?.("medium");
         };
@@ -322,7 +337,6 @@ function initApp() {
 
   // ===== init =====
   (async()=>{
-    // 1) Заголовок/видео/лого
     try {
       const cfg = await loadConfig();
       if (cfg?.title) {
@@ -333,7 +347,6 @@ function initApp() {
       renderHome(cfg?.logo_url || "", cfg?.video_url || "");
     } catch {}
 
-    // 2) Категории
     try {
       const cats = await loadCategories();
       renderCategories(cats);
