@@ -7,7 +7,6 @@ import argparse
 # --- настройки ---
 DB_PATH  = os.getenv("DB_PATH", "data.sqlite")
 CSV_FILE = os.getenv("CSV_FILE", "products_template.csv")  # дефолт, если не указан флаг
-
 MODELS_SQL = "models.sql"  # должен содержать таблицы products, orders, order_items, settings
 
 
@@ -16,6 +15,14 @@ def ensure_schema():
     sql = Path(MODELS_SQL).read_text(encoding="utf-8")
     with sqlite3.connect(DB_PATH) as conn:
         conn.executescript(sql)
+        # ✅ миграция на случай, если база уже создана без images_urls
+        try:
+            conn.execute("ALTER TABLE products ADD COLUMN images_urls TEXT")
+            conn.commit()
+            print("DB migrated: products.images_urls added")
+        except Exception:
+            # колонка уже есть или таблицы ещё нет — ок
+            pass
     print("DB schema ensured")
 
 
@@ -46,6 +53,29 @@ def upsert_setting(cur, key: str, value: str) -> bool:
     return True
 
 
+def _clean_gallery(s: str) -> str:
+    """
+    Приводим галерею к формату: url1|url2|url3
+    Разрешаем на вход:
+      - уже с | (pipe)
+      - с запятыми
+      - с пробелами/переносами
+    """
+    if not s:
+        return ""
+    raw = str(s).strip()
+
+    # если уже pipe-разделитель — оставляем
+    if "|" in raw:
+        parts = [p.strip() for p in raw.split("|")]
+    else:
+        # иначе допускаем "url1, url2, url3"
+        parts = [p.strip() for p in raw.replace("\n", " ").split(",")]
+
+    parts = [p for p in parts if p]
+    return "|".join(parts)
+
+
 def insert_product(cur, row: dict) -> bool:
     """
     Обычная вставка товара.
@@ -63,9 +93,9 @@ def insert_product(cur, row: dict) -> bool:
         return False  # спец-строки не пишем в products
 
     image_url = (row.get("image_url") or "").strip()
-    images_urls = (row.get("images_urls") or "").strip()
+    images_urls = _clean_gallery(row.get("images_urls") or "")
 
-    # если галерея пустая, но есть image_url — используем image_url как 1 фото
+    # ✅ если галерея пустая, но есть превью — используем превью как 1 фото
     if not images_urls and image_url:
         images_urls = image_url
 
