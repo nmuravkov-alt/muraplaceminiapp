@@ -14,6 +14,9 @@
 
   <!-- ===== Полноэкранный просмотр фото ===== -->
   <div id="imgViewer" class="hidden">
+    <!-- ✅ крестик -->
+    <button id="viewerClose" type="button" aria-label="Закрыть">✕</button>
+
     <img src="" alt="preview"/>
     <div id="viewerDots"></div>
   </div>
@@ -42,13 +45,14 @@
   <div id="sheet" class="sheet hidden"></div>
   <div id="backdrop" class="backdrop hidden"></div>
 
-  <!-- ✅ Viewer script: try/catch + фикс iOS "двойного шага" (touchend + click) -->
+  <!-- ✅ Viewer script: try/catch + фикс iOS "двойного шага" (touchend + click) + крестик -->
   <script>
   (function () {
     try {
       const viewer = document.getElementById("imgViewer");
       const viewerImg = viewer ? viewer.querySelector("img") : null;
       const viewerDots = document.getElementById("viewerDots");
+      const viewerClose = document.getElementById("viewerClose");
 
       if (!viewer || !viewerImg) return;
 
@@ -117,6 +121,22 @@
         else closeViewer();
       }
 
+      // ✅ крестик закрытия
+      if (viewerClose) {
+        viewerClose.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          closeViewer();
+        }, true);
+        // на iOS после touch может быть click — блокируем
+        viewerClose.addEventListener("touchend", (e) => {
+          lastTouchAt = Date.now();
+          e.preventDefault();
+          e.stopPropagation();
+          closeViewer();
+        }, { passive: false });
+      }
+
       // ✅ Открытие по тапу на карточке/hero
       document.addEventListener("click", (e) => {
         // ✅ если только что был touch — игнорим click
@@ -141,13 +161,13 @@
 
       // ✅ Закрыть по фону
       viewer.addEventListener("click", (e) => {
-        if (Date.now() - lastTouchAt < 450) return; // ✅
+        if (Date.now() - lastTouchAt < 450) return;
         if (e.target === viewer) closeViewer();
       }, true);
 
       // ✅ Тап по фото → листать/закрыть
       viewerImg.addEventListener("click", (e) => {
-        if (Date.now() - lastTouchAt < 450) return; // ✅
+        if (Date.now() - lastTouchAt < 450) return;
         if (moved) return;
         tapNav(e.clientX);
       }, true);
@@ -185,7 +205,7 @@
 
       // Touch end (swipe/tap)
       viewer.addEventListener("touchend", (e) => {
-        lastTouchAt = Date.now(); // ✅ ключевой фикс: блокируем следом идущий click
+        lastTouchAt = Date.now(); // ✅ блокируем следом идущий click
 
         if (!album.length) return;
         startDist = 0;
