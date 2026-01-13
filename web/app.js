@@ -48,8 +48,13 @@ function initApp() {
   function normalizeImageUrl(u){
     if(!u) return "";
     u = String(u).trim();
+
+    // если локальные ассеты
+    if (u.startsWith("/images/")) return u;
+
     const q = u.indexOf("?");
     if(q > -1) u = u.slice(0,q);
+
     const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
     if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
     return u;
@@ -58,6 +63,10 @@ function initApp() {
   function normalizeVideoUrl(u){
     if(!u) return "";
     u = String(u).trim();
+
+    // локальные ассеты
+    if (u.startsWith("/images/")) return u;
+
     // НЕ режем ?query у видео
     const m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
     if(m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
@@ -135,11 +144,7 @@ function initApp() {
     // пробуем автоплей; если нельзя — останется poster (превью)
     const v = heroEl.querySelector("video");
     if (v) {
-      v.play().catch(() => {
-        // можно оставить без controls — будет просто постер
-        // но если хочешь, раскомментируй:
-        // v.setAttribute("controls","controls");
-      });
+      v.play().catch(() => {});
     }
   }
 
@@ -173,33 +178,56 @@ function initApp() {
       else if((p.category||"").toLowerCase().includes("обув")) sizes = SHOES_SIZES;
       else sizes = CLOTHES_SIZES;
 
-      const imgUrl = normalizeImageUrl(p.image_url || p.image || "");
-      let album = [];
+      const desc = (p.description || "").trim();
 
-      // альбом (url1|url2|url3...)
-      if (p.images && String(p.images).trim()) {
-        album = String(p.images)
+      // ====== ГАЛЕРЕЯ ======
+      // 1) основной альбом из p.images_urls (url1|url2|url3)
+      let album = [];
+      if (p.images_urls && String(p.images_urls).trim()) {
+        album = String(p.images_urls)
           .split("|")
           .map(s => normalizeImageUrl(s))
           .filter(Boolean);
       }
-      if (imgUrl && !album.includes(imgUrl)) album.unshift(imgUrl);
 
-      const desc = (p.description || "").trim();
+      // 2) fallback на image_url
+      const cover = normalizeImageUrl(p.image_url || p.image || "");
+      if (cover && !album.includes(cover)) album.unshift(cover);
+
+      // 3) если альбом пуст — просто не показываем превью
+      const hasGallery = album.length > 0;
+
+      // HTML галереи (свайп + точки) + data-album для fullscreen viewer
+      const galleryHtml = hasGallery ? `
+        <div class="thumb">
+          <div class="gallery" data-images-count="${album.length}">
+            <div class="gallery-track" style="transform: translateX(0);">
+              ${album.map((src)=>`
+                <div class="gallery-slide">
+                  <img
+                    src="${src}"
+                    alt="${esc(p.title)}"
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                    data-album="${esc(album.join("|"))}"
+                  />
+                </div>
+              `).join("")}
+            </div>
+
+            ${album.length > 1 ? `
+              <div class="gallery-dots">
+                ${album.map((_,i)=>`<span class="gallery-dot ${i===0?'active':''}"></span>`).join("")}
+              </div>
+            ` : ``}
+          </div>
+        </div>
+      ` : ``;
 
       const card = document.createElement("div");
       card.className = "card";
       card.innerHTML = `
-        ${imgUrl ? `
-          <div class="thumb">
-            <img
-              src="${imgUrl}"
-              alt="${esc(p.title)}"
-              loading="lazy"
-              referrerpolicy="no-referrer"
-              data-album="${esc(album.join("|"))}"
-            />
-          </div>` : ``}
+        ${galleryHtml}
 
         <div class="title">${esc(p.title)}</div>
         <div class="price">${money(p.price)}</div>
@@ -213,6 +241,69 @@ function initApp() {
       `;
       productsEl.appendChild(card);
 
+      // ===== swipe logic for gallery =====
+      const gallery = card.querySelector(".gallery");
+      if (gallery) {
+        const track = gallery.querySelector(".gallery-track");
+        const dotsWrap = gallery.querySelector(".gallery-dots");
+        const dots = dotsWrap ? Array.from(dotsWrap.querySelectorAll(".gallery-dot")) : [];
+        const count = Number(gallery.dataset.imagesCount || 0);
+
+        let gIdx = 0;
+        const setIdx = (n, animate=true) => {
+          if (!track || count <= 0) return;
+          gIdx = (n + count) % count;
+          track.style.transition = animate ? "transform .22s ease" : "none";
+          track.style.transform = `translateX(${-gIdx * 100}%)`;
+          if (dots.length) dots.forEach((d,i)=>d.classList.toggle("active", i===gIdx));
+        };
+
+        // touch swipe
+        let startX = 0, startY = 0, dx = 0, dragging = false;
+
+        gallery.addEventListener("touchstart", (e) => {
+          if (count <= 1) return;
+          const t = e.touches[0];
+          startX = t.clientX;
+          startY = t.clientY;
+          dx = 0;
+          dragging = true;
+          if (track) track.style.transition = "none";
+        }, {passive:true});
+
+        gallery.addEventListener("touchmove", (e) => {
+          if (!dragging || count <= 1 || !track) return;
+          const t = e.touches[0];
+          const moveX = t.clientX - startX;
+          const moveY = t.clientY - startY;
+
+          // если вертикальный скролл — не мешаем
+          if (Math.abs(moveY) > Math.abs(moveX)) return;
+
+          dx = moveX;
+          track.style.transform = `translateX(calc(${-gIdx * 100}% + ${dx}px))`;
+        }, {passive:true});
+
+        gallery.addEventListener("touchend", () => {
+          if (!dragging || count <= 1) return;
+          dragging = false;
+
+          const threshold = 40;
+          if (dx > threshold) setIdx(gIdx - 1);
+          else if (dx < -threshold) setIdx(gIdx + 1);
+          else setIdx(gIdx); // вернуть назад
+        });
+
+        // если картинки не грузятся — скрываем превью
+        gallery.querySelectorAll("img").forEach(img=>{
+          img.onerror = () => {
+            const th = img.closest(".thumb");
+            if (th) th.style.display = "none";
+          };
+        });
+      }
+
+      // ===== add to cart =====
       const btn = $("#btn-" + p.id);
       if (btn) {
         btn.onclick = () => {
