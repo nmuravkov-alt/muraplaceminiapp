@@ -204,7 +204,6 @@ select{
   overflow: hidden;
 }
 
-/* Контейнер для видео/картинки */
 .hero .hero-box {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -214,7 +213,6 @@ select{
   position: relative;
 }
 
-/* Видео */
 .hero .hero-box video {
   width: 100%;
   height: 100%;
@@ -222,7 +220,6 @@ select{
   display: block;
 }
 
-/* Картинка (fallback) */
 .hero .hero-box img {
   width: 100%;
   height: 100%;
@@ -230,7 +227,6 @@ select{
   display: block;
 }
 
-/* Подпись под логотипом/видео */
 .hero .tagline {
   text-align: center;
   font-weight: 600;
@@ -239,7 +235,6 @@ select{
   color: #111;
 }
 
-/* Полное скрытие встроенных контролов iOS/Safari */
 .hero video::-webkit-media-controls,
 .hero video::-webkit-media-controls-panel,
 .hero video::-webkit-media-controls-enclosure,
@@ -271,7 +266,7 @@ select{
   pointer-events: none !important;
 }
 
-/* ✅ чтобы кнопки внизу/сверху ВСЕГДА нажимались, когда viewer скрыт */
+/* ✅ доп.страховка: даже если внутри что-то останется — клики не ловит */
 #imgViewer.hidden *{
   pointer-events: none !important;
 }
