@@ -240,6 +240,47 @@ function initApp() {
     };
   }
 
+  // ✅ ВСПОМОГАТЕЛЬНОЕ: попытки автозапуска видео (Telegram iOS)
+  // ✅ СТАРТ через 2.5 секунды после открытия + несколько ретраев
+  function forceAutoplay(videoEl){
+    if (!videoEl) return;
+
+    // важные атрибуты для iOS
+    try { videoEl.muted = true; } catch {}
+    try { videoEl.autoplay = true; } catch {}
+    try { videoEl.playsInline = true; } catch {}
+
+    videoEl.setAttribute("muted", "");
+    videoEl.setAttribute("autoplay", "");
+    videoEl.setAttribute("playsinline", "");
+    videoEl.setAttribute("webkit-playsinline", "");
+    videoEl.setAttribute("preload", "auto");
+
+    const tryPlay = () => {
+      try {
+        const p = videoEl.play();
+        if (p && typeof p.catch === "function") p.catch(()=>{});
+      } catch {}
+    };
+
+    // ⏱ главный запуск: 2–3 секунды после открытия
+    setTimeout(() => {
+      tryPlay();
+      // ретраи после основного запуска (часто нужно именно так в Telegram iOS)
+      setTimeout(tryPlay, 150);
+      setTimeout(tryPlay, 650);
+      setTimeout(tryPlay, 1400);
+    }, 2500);
+
+    // если iOS всё равно блокнул — первый микро-жест запустит
+    document.addEventListener("touchstart", tryPlay, { once:true, passive:true });
+    document.addEventListener("click", tryPlay, { once:true });
+
+    // Telegram WebApp события — тоже триггер (на всякий)
+    try { tg?.onEvent?.("viewportChanged", tryPlay); } catch {}
+    try { tg?.onEvent?.("themeChanged", tryPlay); } catch {}
+  }
+
   // ===== render home (видео/лого) =====
   function renderHome(logoUrl, videoUrl) {
     if (!heroEl) return;
@@ -261,14 +302,17 @@ function initApp() {
       const src = normalizeVideoUrl(videoUrl);
       const poster = hasLogo ? normalizeImageUrl(logoUrl) : "";
 
+      // ✅ КЛЮЧЕВОЕ: autoplay + muted + playsinline + preload="auto"
       box.innerHTML = `
         <video
           src="${src}"
           ${poster ? `poster="${poster}"` : ""}
           muted
+          autoplay
           loop
           playsinline
-          preload="metadata"
+          webkit-playsinline
+          preload="auto"
           style="width:100%;height:100%;object-fit:cover;border-radius:12px;"
           controlslist="nodownload noplaybackrate noremoteplayback nofullscreen">
         </video>
@@ -286,13 +330,14 @@ function initApp() {
     tagline.className = "subtitle";
     tagline.style.textAlign = "center";
     tagline.style.marginTop = "8px";
-    tagline.textContent = "https://t.me/muraplace";
+    tagline.textContent = "https://t.me/akumastreetwear";
     heroEl.appendChild(tagline);
 
     heroEl.classList.remove("hidden");
 
+    // ✅ Автозапуск (максимально возможный)
     const v = heroEl.querySelector("video");
-    if (v) v.play().catch(() => {});
+    if (v) forceAutoplay(v);
   }
 
   function renderCategories(list){
